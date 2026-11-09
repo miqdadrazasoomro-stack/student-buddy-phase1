@@ -1,0 +1,49 @@
+name: Build Student Buddy Phase 1 APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Extract Student Buddy ZIP
+        run: |
+          unzip -q "student_buddy_phase1 (1).zip" -d extracted
+          PROJECT_DIR=$(find extracted -name pubspec.yaml -printf '%h\n' | head -n 1)
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: pubspec.yaml not found"
+            exit 1
+          fi
+          cp -a "$PROJECT_DIR"/. .
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android Project
+        run: flutter create --platforms=android --org com.studentbuddy --project-name student_buddy .
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Release APK
+        run: flutter build apk --release
+
+      - name: Upload Student Buddy APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Student-Buddy-Phase1-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
