@@ -1,6 +1,6 @@
  name: Build Student Buddy Phase 1 APK
 
-on:
+"on":
   workflow_dispatch:
 
 jobs:
@@ -12,6 +12,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Find and Extract Student Buddy ZIP
+        shell: bash
         run: |
           ZIP_FILE=$(find . -maxdepth 1 -type f -iname 'student_buddy_phase1*.zip' -print -quit)
 
@@ -61,7 +62,7 @@ jobs:
               sys.exit("ERROR: Do not use a secret or service_role key.")
 
           if not (key.startswith("sb_publishable_") or key.startswith("eyJ")):
-              sys.exit("ERROR: SUPABASE_ANON_KEY must be an anon or publishable key.")
+              sys.exit("ERROR: Invalid Supabase anon/publishable key.")
 
           with open("env.json", "w") as f:
               json.dump({
