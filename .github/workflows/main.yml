@@ -1,4 +1,4 @@
-name: Build Student Buddy Phase 1 APK
+ name: Build Student Buddy Phase 1 APK
 
 on:
   workflow_dispatch:
@@ -11,15 +11,66 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Extract Student Buddy ZIP
+      - name: Find and Extract Student Buddy ZIP
         run: |
-          unzip -q "student_buddy_phase1 (1).zip" -d extracted
-          PROJECT_DIR=$(find extracted -name pubspec.yaml -printf '%h\n' | head -n 1)
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: pubspec.yaml not found"
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname 'student_buddy_phase1*.zip' -print -quit)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: Student Buddy ZIP file not found."
             exit 1
           fi
+
+          mkdir -p extracted
+          unzip -q "$ZIP_FILE" -d extracted
+
+          PROJECT_DIR=$(find extracted -name pubspec.yaml -printf '%h\n' | head -n 1)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: pubspec.yaml not found inside ZIP."
+            exit 1
+          fi
+
           cp -a "$PROJECT_DIR"/. .
+
+      - name: Create env.json from GitHub Secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import json
+          import sys
+          from urllib.parse import urlparse
+
+          url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+          key = os.environ.get("SUPABASE_ANON_KEY", "").strip()
+
+          if not url:
+              sys.exit("ERROR: SUPABASE_URL secret is missing.")
+
+          if not key:
+              sys.exit("ERROR: SUPABASE_ANON_KEY secret is missing.")
+
+          parsed = urlparse(url)
+
+          if parsed.scheme != "https" or not parsed.netloc or parsed.path:
+              sys.exit("ERROR: SUPABASE_URL is invalid.")
+
+          if key.startswith("sb_secret_") or "service_role" in key.lower():
+              sys.exit("ERROR: Do not use a secret or service_role key.")
+
+          if not (key.startswith("sb_publishable_") or key.startswith("eyJ")):
+              sys.exit("ERROR: SUPABASE_ANON_KEY must be an anon or publishable key.")
+
+          with open("env.json", "w") as f:
+              json.dump({
+                  "SUPABASE_URL": url,
+                  "SUPABASE_ANON_KEY": key
+              }, f)
+
+          print("Supabase configuration created successfully.")
+          PY
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -40,10 +91,14 @@ jobs:
         run: flutter pub get
 
       - name: Build Release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --dart-define-from-file=env.json
 
       - name: Upload Student Buddy APK
         uses: actions/upload-artifact@v4
         with:
           name: Student-Buddy-Phase1-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Remove Temporary Environment File
+        if: always()
+        run: rm -f env.json
